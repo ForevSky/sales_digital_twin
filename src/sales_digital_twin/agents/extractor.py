@@ -3,7 +3,7 @@
 from sales_digital_twin.agents.base import BaseAgent
 from sales_digital_twin.models.extraction import ExtractionResult
 
-
+# ExtractorAgent 信息提取 Agent
 class ExtractorAgent(BaseAgent[ExtractionResult]):
     prompt_name = "extractor"
     output_model = ExtractionResult

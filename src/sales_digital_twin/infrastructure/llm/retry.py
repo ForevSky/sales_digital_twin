@@ -15,15 +15,18 @@ R = TypeVar("R")
 # 可恢复的网络/API 异常；ValidationError 在 BaseAgent.run() 层单独处理
 RETRYABLE_EXCEPTIONS = (APIConnectionError, RateLimitError, APITimeoutError)
 
-
+# with_llm_retry 重试装饰器
 def with_llm_retry(max_attempts: int = 2) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    # 装饰器
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
+        # 重试装饰器
         @retry(
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             stop=stop_after_attempt(max_attempts),
             wait=wait_exponential(multiplier=1, min=1, max=8),
             reraise=True,
         )
+        # 重试函数
         @wraps(func)
         def _retrying(*args: P.args, **kwargs: P.kwargs) -> R:
             return func(*args, **kwargs)

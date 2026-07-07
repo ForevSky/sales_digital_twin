@@ -4,7 +4,7 @@ from sales_digital_twin.agents.base import BaseAgent
 from sales_digital_twin.models.extraction import ExtractionResult
 from sales_digital_twin.models.suggestions import CRMSuggestion
 
-
+# CRMAdvisorAgent CRM 顾问 Agent
 class CRMAdvisorAgent(BaseAgent[CRMSuggestion]):
     prompt_name = "crm_advisor"
     output_model = CRMSuggestion

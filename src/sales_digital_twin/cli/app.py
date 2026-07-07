@@ -9,12 +9,14 @@ from pathlib import Path
 from sales_digital_twin.core.exceptions import EmptyInputError, SalesDigitalTwinError
 from sales_digital_twin.core.factory import create_pipeline
 from sales_digital_twin.core.paths import examples_dir, outputs_dir
+from sales_digital_twin.core.pipeline import SalesDigitalTwinPipeline
 from sales_digital_twin.infrastructure.config import Settings
 from sales_digital_twin.infrastructure.logging import setup_logging
 from sales_digital_twin.models.input import ProcessRequest
 
 logger = logging.getLogger(__name__)
 
+SECTION_WIDTH = 60
 DEMO_SAMPLES: tuple[tuple[str, str], ...] = (
     ("示例1 - 正常销售通话", "sample1_sales.txt"),
     ("示例2 - 价格谈判", "sample2_negotiation.txt"),
@@ -42,6 +44,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_section(title: str) -> None:
+    print(f"\n{'=' * SECTION_WIDTH}\n{title}\n{'=' * SECTION_WIDTH}")
+
+
+def _report_error(exc: SalesDigitalTwinError) -> None:
+    logger.error("%s", exc)
+    print(f"错误: {exc}", file=sys.stderr)
+
+
+def _read_text_file(path: Path, *, missing_hint: str = "文件") -> str:
+    if not path.exists():
+        raise SalesDigitalTwinError(f"{missing_hint}不存在: {path}")
+    return path.read_text(encoding="utf-8").strip()
+
+
 def read_multiline_input(prompt: str = "请输入通话文本（单独一行空行结束）：") -> str:
     """从 stdin 读取多行文本，遇到空行且已有内容时结束。"""
     print(prompt)
@@ -58,10 +75,7 @@ def read_input(args: argparse.Namespace) -> str:
     if args.text:
         return args.text.strip()
     if args.file:
-        path = args.file
-        if not path.exists():
-            raise SalesDigitalTwinError(f"文件不存在: {path}")
-        return path.read_text(encoding="utf-8").strip()
+        return _read_text_file(args.file)
     if args.interactive:
         return read_multiline_input()
     raise SalesDigitalTwinError("未指定输入方式")
@@ -74,51 +88,54 @@ def write_output(content: str, output_path: Path | None, *, auto_save: bool = Tr
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content, encoding="utf-8")
         print(f"\n[已保存至 {output_path}]", file=sys.stderr)
-    elif auto_save:
+        return
+
+    if auto_save:
         default_dir = outputs_dir()
         default_dir.mkdir(exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        auto_path = default_dir / f"result_{timestamp}.txt"
+        auto_path = default_dir / f"result_{datetime.now():%Y%m%d_%H%M%S}.txt"
         auto_path.write_text(content, encoding="utf-8")
         print(f"\n[已自动保存至 {auto_path}]", file=sys.stderr)
 
 
 def load_sample_text(filename: str) -> str:
-    path = examples_dir() / filename
-    if not path.exists():
-        raise SalesDigitalTwinError(f"示例文件不存在: {path}")
-    return path.read_text(encoding="utf-8").strip()
+    return _read_text_file(examples_dir() / filename, missing_hint="示例文件")
 
 
-def process_and_show(text: str, output_path: Path | None = None) -> None:
+def process_and_show(
+    text: str,
+    output_path: Path | None = None,
+    *,
+    pipeline: SalesDigitalTwinPipeline | None = None,
+) -> None:
     """执行 Pipeline 并输出结果。"""
     if not text:
         raise EmptyInputError("输入文本不能为空")
-    pipeline = create_pipeline()
+    pipeline = pipeline or create_pipeline()
     result = pipeline.process(ProcessRequest(text=text))
     write_output(result.render(), output_path)
 
 
-def run_demo_batch(output_path: Path | None = None) -> int:
+def run_demo_batch(
+    output_path: Path | None = None,
+    *,
+    pipeline: SalesDigitalTwinPipeline | None = None,
+) -> int:
     """批量跑三组标准示例，用于答辩/验收演示。"""
-    pipeline = create_pipeline()
+    pipeline = pipeline or create_pipeline()
     for title, filename in DEMO_SAMPLES:
-        text = load_sample_text(filename)
-        print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
-        result = pipeline.process(ProcessRequest(text=text))
-        write_output(result.render(), output_path)
+        _print_section(title)
+        process_and_show(load_sample_text(filename), output_path, pipeline=pipeline)
     return 0
 
 
 def _print_main_menu() -> None:
-    print("\n" + "=" * 60)
-    print("  销售数字分身 —— 交互式演示系统")
-    print("=" * 60)
+    _print_section("  销售数字分身 —— 交互式演示系统")
     print("  1. 运行全部系统默认示例")
     print("  2. 选择单个系统默认示例")
     print("  3. 自定义输入通话文本")
     print("  0. 退出")
-    print("-" * 60)
+    print("-" * SECTION_WIDTH)
 
 
 def _print_sample_menu() -> None:
@@ -128,7 +145,7 @@ def _print_sample_menu() -> None:
     print("  0. 返回上级菜单")
 
 
-def _run_single_demo() -> None:
+def _run_single_demo(pipeline: SalesDigitalTwinPipeline) -> None:
     _print_sample_menu()
     choice = input("请输入编号: ").strip()
     if choice == "0":
@@ -136,20 +153,21 @@ def _run_single_demo() -> None:
     if not choice.isdigit():
         print("无效输入，请输入数字编号。", file=sys.stderr)
         return
+
     index = int(choice) - 1
-    if index < 0 or index >= len(DEMO_SAMPLES):
+    if not 0 <= index < len(DEMO_SAMPLES):
         print("编号超出范围，请重新选择。", file=sys.stderr)
         return
 
     title, filename = DEMO_SAMPLES[index]
-    text = load_sample_text(filename)
-    print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
-    process_and_show(text)
+    _print_section(title)
+    process_and_show(load_sample_text(filename), pipeline=pipeline)
 
 
 def run_interactive_demo() -> int:
     """交互式演示：用户选择系统默认示例或自定义输入。"""
     print("欢迎使用销售数字分身演示系统。")
+    pipeline = create_pipeline()
 
     while True:
         _print_main_menu()
@@ -160,24 +178,20 @@ def run_interactive_demo() -> int:
                 print("感谢使用，再见！")
                 return 0
             if choice == "1":
-                run_demo_batch()
+                run_demo_batch(pipeline=pipeline)
             elif choice == "2":
-                _run_single_demo()
+                _run_single_demo(pipeline)
             elif choice == "3":
                 text = read_multiline_input()
                 if not text:
                     raise EmptyInputError("未输入通话文本")
-                print(f"\n{'=' * 60}\n自定义输入\n{'=' * 60}")
-                process_and_show(text)
+                _print_section("自定义输入")
+                process_and_show(text, pipeline=pipeline)
             else:
                 print("无效选择，请输入 0-3。", file=sys.stderr)
                 continue
-        except EmptyInputError as exc:
-            logger.error("%s", exc)
-            print(f"错误: {exc}", file=sys.stderr)
         except SalesDigitalTwinError as exc:
-            logger.error("%s", exc)
-            print(f"错误: {exc}", file=sys.stderr)
+            _report_error(exc)
 
         if input("\n按 Enter 继续，或输入 q 退出: ").strip().lower() == "q":
             print("感谢使用，再见！")
@@ -185,7 +199,7 @@ def run_interactive_demo() -> int:
 
 
 def _has_cli_input(args: argparse.Namespace) -> bool:
-    return bool(args.text or args.file or args.interactive or args.demo)
+    return any((args.text, args.file, args.interactive, args.demo))
 
 
 def main() -> int:
@@ -199,20 +213,16 @@ def main() -> int:
         if not _has_cli_input(args):
             return run_interactive_demo()
 
+        pipeline = create_pipeline()
         if args.demo:
-            return run_demo_batch(args.output)
+            return run_demo_batch(args.output, pipeline=pipeline)
 
         text = read_input(args)
         if not text:
             raise EmptyInputError("输入文本不能为空")
 
-        process_and_show(text, args.output)
+        process_and_show(text, args.output, pipeline=pipeline)
         return 0
-    except EmptyInputError as exc:
-        logger.error("%s", exc)
-        print(f"错误: {exc}", file=sys.stderr)
-        return 1
     except SalesDigitalTwinError as exc:
-        logger.error("%s", exc)
-        print(f"错误: {exc}", file=sys.stderr)
+        _report_error(exc)
         return 1

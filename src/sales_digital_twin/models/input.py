@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-
+# ProcessRequest Pipeline 输入模型
 class ProcessRequest(BaseModel):
     """单次处理的输入载体，由 CLI 构造后传入 Pipeline。"""
 

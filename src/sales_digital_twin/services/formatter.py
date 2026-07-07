@@ -2,7 +2,7 @@
 
 from sales_digital_twin.models.extraction import ExtractionResult
 
-
+# FormatterService 格式化服务
 class FormatterService:
     def format(self, data: ExtractionResult) -> str:
         """输出字段顺序与标点格式不可变更，供销售直接复制到 CRM。"""

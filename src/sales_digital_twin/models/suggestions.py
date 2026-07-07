@@ -8,7 +8,7 @@ class CRMFieldUpdate(BaseModel):
     old_value: str = "未知"
     new_value: str
 
-
+# CRMSuggestion CRM 更新建议
 class CRMSuggestion(BaseModel):
     updates: list[CRMFieldUpdate] = Field(default_factory=list)
 
@@ -20,7 +20,7 @@ class CRMSuggestion(BaseModel):
         lines.extend(f"- {item.field}：{item.old_value} → {item.new_value}" for item in self.updates)
         return "\n".join(lines)
 
-
+# ContractSuggestion 合同变更建议
 class ContractSuggestion(BaseModel):
     has_change: bool = False
     suggestion: str = "暂无合同变更需求，待方案确认后再议。"

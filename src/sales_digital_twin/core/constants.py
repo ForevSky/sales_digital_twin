@@ -30,3 +30,28 @@ SALES_KEYWORD_HIT_THRESHOLD = 3
 
 # 销售场景文本最小长度，用于 RuleEngine 第二层过滤（降本 + 提速）
 MIN_SALES_TEXT_LENGTH = 50
+
+# 强销售信号词：命中 ≥2 且文本足够长 → 高置信销售（弥补短文本未达 MIN_SALES_TEXT_LENGTH）
+STRONG_SALES_KEYWORDS: tuple[str, ...] = (
+    "价格",
+    "合同",
+    "报价",
+    "签约",
+    "付款",
+    "谈判",
+    "预算",
+)
+STRONG_SALES_MIN_TEXT_LENGTH = 30
+
+# 合同相关关键词：未命中时可跳过 ContractAdvisorAgent（降本）
+CONTRACT_KEYWORDS: tuple[str, ...] = (
+    "价格",
+    "合同",
+    "报价",
+    "签约",
+    "付款",
+    "交付",
+    "条款",
+    "谈判",
+    "预算",
+)

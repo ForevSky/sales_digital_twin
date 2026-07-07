@@ -30,7 +30,7 @@ class PipelineResult(BaseModel):
     def fallback(cls, message: str) -> "PipelineResult":
         """非销售场景等短路路径使用。"""
         return cls(is_fallback=True, fallback_message=message)
-
+    # success 销售场景完整处理结果
     @classmethod
     def success(
         cls,

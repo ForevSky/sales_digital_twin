@@ -4,7 +4,7 @@ from sales_digital_twin.agents.base import BaseAgent
 from sales_digital_twin.models.enums import SceneType
 from sales_digital_twin.models.extraction import ClassificationResult
 
-
+# ClassifierAgent 场景分类 Agent
 class ClassifierAgent(BaseAgent[ClassificationResult]):
     prompt_name = "classifier"
     output_model = ClassificationResult
