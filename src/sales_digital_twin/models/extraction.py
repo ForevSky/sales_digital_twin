@@ -29,7 +29,7 @@ class ExtractionResult(BaseModel):
     def customer_name_not_empty(cls, value: str) -> str:
         return value.strip() or "待确认"
 
-
+# ClassificationResult 分类结果
 class ClassificationResult(BaseModel):
     """ClassifierAgent 输出；scene 支持中英文别名。"""
 

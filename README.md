@@ -11,7 +11,7 @@
 | CRM 更新建议 | 推断需变更的 CRM 字段（如客户状态、商机金额） |
 | 非销售兜底 | 识别非销售对话，输出「非销售场景，跳过处理」 |
 | 合同变更建议 | 识别价格、条款、交付周期等合同相关变更需求 |
-| 交互式演示 | 菜单选择系统默认示例或自定义输入，适合答辩验收 |
+| 交互式演示 | 菜单选择示例或自定义输入；每轮完成后直接回主菜单，适合答辩验收 |
 
 ---
 
@@ -201,7 +201,7 @@ sales-twin
 | **3** | 手动粘贴或输入自定义通话文本（空行结束） |
 | **0** | 退出程序 |
 
-每次处理完成后，按 **Enter** 返回菜单继续演示，或输入 **q** 退出。
+每轮处理完成后**直接回到主菜单**继续演示；仅选 **0** 退出（子菜单选 0 返回主菜单）。
 
 系统默认示例对应 `examples/` 目录：
 
@@ -312,10 +312,12 @@ pytest tests/unit -v
 
 | 测试文件 | 说明 |
 |----------|------|
-| `test_rule_engine.py` | 销售 / 非销售关键词规则预筛 |
+| `test_rule_engine.py` | 销售 / 非销售规则预筛、强关键词 |
 | `test_formatter.py` | 四行结构化输出格式 |
-| `test_pipeline_fallback.py` | 非销售场景 Pipeline 短路 |
-| `test_llm_retry.py` | LLM 重试装饰器 |
+| `test_pipeline_fallback.py` | 非销售场景 Pipeline 短路、空输入 |
+| `test_pipeline_success.py` | 销售链路 Mock、合同 Agent 条件跳过 |
+| `test_json_parser.py` | LLM JSON 文本解析 |
+| `test_llm_retry.py` | LLM 网络层重试装饰器 |
 | `test_cli_parser.py` | CLI 参数解析、演示样本加载 |
 
 ### 运行集成测试（需要 API Key）
@@ -356,16 +358,16 @@ pytest tests/unit --cov=sales_digital_twin --cov-report=term-missing
 ```
 poject_custom/
 ├── src/sales_digital_twin/     # 主程序
-│   ├── cli/                    # 命令行入口
-│   ├── core/                   # Pipeline 编排、工厂、异常
+│   ├── cli/                    # 命令行入口（交互式菜单 + 参数模式）
+│   ├── core/                   # Pipeline 编排、工厂、常量、异常
 │   ├── agents/                 # 分类 / 提取 / CRM / 合同 Agent
 │   ├── services/               # 规则引擎、格式化
 │   ├── models/                 # Pydantic 数据模型
-│   └── infrastructure/         # DeepSeek 配置、LLM、Prompt
+│   └── infrastructure/         # 配置、LLM、Prompt、重试、trace_id
 ├── examples/                   # 三组演示输入样本
 ├── tests/                      # 单元测试 + 集成测试
 ├── outputs/                    # 运行结果（自动生成）
-├── docs/                       # 需求、架构、演示文档
+├── docs/                       # 需求、架构、设计文档
 ├── .env.example                # 环境变量模板
 ├── pyproject.toml              # 项目配置与依赖
 └── requirements.txt            # pip 依赖清单
@@ -377,15 +379,31 @@ poject_custom/
 
 ```
 CLI 输入（交互式菜单 / 命令行参数）
-  → Pipeline.process()
-  → RuleEngine 规则预筛
-      ├─ [非销售] → 返回「非销售场景，跳过处理」
-      └─ [销售]   → ExtractorAgent（信息提取）
-                  → FormatterService（四行格式化）
-                  → CRMAdvisorAgent（CRM 建议）
-                  → ContractAdvisorAgent（合同建议）
+  → SalesDigitalTwinPipeline.process()
+  → RuleEngine 规则预筛（强关键词 + 普通关键词）
+      ├─ [高置信 non_sales] →「非销售场景，跳过处理」（零 LLM）
+      └─ [边界样本]         → ClassifierAgent LLM 复核
+  → [sales] ExtractorAgent（JSON 模式 + Pydantic 校验）
+  → FormatterService（四行格式化）
+  → CRM / 合同建议
+      ├─ 无合同关键词 → 仅 CRM，合同用默认文案
+      └─ 有关键词     → CRM 与合同并行 LLM 调用
   → PipelineResult.render() → 控制台 / outputs/
 ```
+
+每次请求生成 `trace_id`，Pipeline 与 Agent 日志可关联排查。
+
+---
+
+## 实现要点（v1.0）
+
+| 主题 | 说明 |
+|------|------|
+| 降本提速 | 规则高置信短路；无合同关键词时跳过 ContractAdvisor |
+| 延迟优化 | CRM 与合同建议并行 LLM 调用 |
+| 输出稳定 | DeepSeek `json_object` 模式 + Pydantic 校验 |
+| 重试分层 | 网络异常（tenacity）与 Schema 解析失败（BaseAgent）分开处理 |
+| CLI 体验 | 会话内复用 Pipeline；交互式一轮后直接回主菜单 |
 
 ---
 
@@ -427,7 +445,6 @@ CLI 输入（交互式菜单 / 命令行参数）
 
 | 文档 | 说明 |
 |------|------|
-| [docs/README.md](docs/README.md) | 文档索引 |
 | [docs/需求文档.md](docs/需求文档.md) | 产品需求、验收标准、演示示例 |
 | [docs/技术方案.md](docs/技术方案.md) | 架构设计、模块职责、实现与测试 |
 

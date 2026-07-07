@@ -3,6 +3,7 @@
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -138,15 +139,12 @@ def _print_main_menu() -> None:
     print("-" * SECTION_WIDTH)
 
 
-def _print_sample_menu() -> None:
+def _run_single_demo(pipeline: SalesDigitalTwinPipeline) -> None:
     print("\n请选择系统默认示例：")
     for index, (title, _) in enumerate(DEMO_SAMPLES, start=1):
         print(f"  {index}. {title}")
     print("  0. 返回上级菜单")
 
-
-def _run_single_demo(pipeline: SalesDigitalTwinPipeline) -> None:
-    _print_sample_menu()
     choice = input("请输入编号: ").strip()
     if choice == "0":
         return
@@ -164,38 +162,42 @@ def _run_single_demo(pipeline: SalesDigitalTwinPipeline) -> None:
     process_and_show(load_sample_text(filename), pipeline=pipeline)
 
 
+def _run_custom_input(pipeline: SalesDigitalTwinPipeline) -> None:
+    text = read_multiline_input()
+    if not text:
+        raise EmptyInputError("未输入通话文本")
+    _print_section("自定义输入")
+    process_and_show(text, pipeline=pipeline)
+
+
 def run_interactive_demo() -> int:
-    """交互式演示：用户选择系统默认示例或自定义输入。"""
+    """交互式演示：每轮处理完成后直接回到主菜单，仅 0 退出。"""
     print("欢迎使用销售数字分身演示系统。")
     pipeline = create_pipeline()
+
+    actions: dict[str, Callable[[], None]] = {
+        "1": lambda: run_demo_batch(pipeline=pipeline),
+        "2": lambda: _run_single_demo(pipeline),
+        "3": lambda: _run_custom_input(pipeline),
+    }
 
     while True:
         _print_main_menu()
         choice = input("请选择: ").strip()
 
-        try:
-            if choice == "0":
-                print("感谢使用，再见！")
-                return 0
-            if choice == "1":
-                run_demo_batch(pipeline=pipeline)
-            elif choice == "2":
-                _run_single_demo(pipeline)
-            elif choice == "3":
-                text = read_multiline_input()
-                if not text:
-                    raise EmptyInputError("未输入通话文本")
-                _print_section("自定义输入")
-                process_and_show(text, pipeline=pipeline)
-            else:
-                print("无效选择，请输入 0-3。", file=sys.stderr)
-                continue
-        except SalesDigitalTwinError as exc:
-            _report_error(exc)
-
-        if input("\n按 Enter 继续，或输入 q 退出: ").strip().lower() == "q":
+        if choice == "0":
             print("感谢使用，再见！")
             return 0
+
+        action = actions.get(choice)
+        if action is None:
+            print("无效选择，请输入 0-3。", file=sys.stderr)
+            continue
+
+        try:
+            action()
+        except SalesDigitalTwinError as exc:
+            _report_error(exc)
 
 
 def _has_cli_input(args: argparse.Namespace) -> bool:
